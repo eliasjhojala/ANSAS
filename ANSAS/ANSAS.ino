@@ -193,35 +193,41 @@ void setup() {
   for (int i = 0; i < N; ++i) {
     trusses[i].setup();
   }
-  Serial3.begin(9600);
+//  Serial3.begin(9600);
   pinMode(13, OUTPUT);
   DMXSerial.init(DMXReceiver);
+
+  pinMode(46, INPUT);
+  pinMode(47, INPUT);
 }
 
 int ksRequestStatus = 0;
 bool ksRequestSent = false;
 unsigned long ksTime;
 void loop() {
-  if (ksRequestSent) {
-    if (Serial3.available()) {
-      int in = (int)Serial3.read();
-      if ((in & 0x0E) == 0 && (in & 0xE0) == 0) {
-        trusses[in >> 4].setKillSwitch(in & 0x01);
-      }
-      while (Serial3.available()) Serial3.read();
-      ksRequestSent = false;
-    }
-    if (millis() - ksTime > 150) {
-      ksRequestSent = 0; 
-    }
-  }
-  if (!ksRequestSent) {
-    ksTime = millis();
-    Serial3.write(ksRequestStatus << 4 | 0x02);
-    if(ksRequestStatus == 0) { ksRequestStatus = 1; }
-    else { ksRequestStatus = 0; }
-    ksRequestSent = 1;
-  }
+//  if (ksRequestSent) {
+//    if (Serial3.available()) {
+//      int in = (int)Serial3.read();
+//      if ((in & 0x0E) == 0 && (in & 0xE0) == 0) {
+//        trusses[in >> 4].setKillSwitch(in & 0x01);
+//      }
+//      while (Serial3.available()) Serial3.read();
+//      ksRequestSent = false;
+//    }
+//    if (millis() - ksTime > 150) {
+//      ksRequestSent = 0; 
+//    }
+//  }
+//  if (!ksRequestSent) {
+//    ksTime = millis();
+//    Serial3.write(ksRequestStatus << 4 | 0x02);
+//    if(ksRequestStatus == 0) { ksRequestStatus = 1; }
+//    else { ksRequestStatus = 0; }
+//    ksRequestSent = 1;
+//  }
+
+  trusses[0].setKillSwitch(!digitalRead(46));
+  trusses[1].setKillSwitch(!digitalRead(47));
   
   unsigned long lastDMX = DMXSerial.noDataSince();
   if (lastDMX < 1500) {
