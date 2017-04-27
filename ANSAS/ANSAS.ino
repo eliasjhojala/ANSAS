@@ -24,10 +24,10 @@ class Truss {
   unsigned long killSwitchLastReceived;
   
   // DEBUG - true jos "älä vaadi killswitchin päivitystä koko ajan"
-  const bool nonStrictKillSwitch = true;
+  const bool nonStrictKillSwitch = false;
   
   bool killSwitchDataValid() {
-    return millis() - killSwitchLastReceived <= killSwitchReceiveInterval || nonStrictKillSwitch;
+    return millis() - killSwitchLastReceived <= killSwitchReceiveInterval*2 || nonStrictKillSwitch;
   }
   
   bool allowMovement = true;
@@ -61,20 +61,21 @@ class Truss {
     const static unsigned long
       // ([pääarvo]L<<8 + [fine]) << 16
       maxHeight = (128L<<8 + 0) << 16,
-      minHeight = (114L<<8 + 0) << 16,
+      minHeight = (119L<<8 + 125) << 16,
       
-      movementTreshold = 1<<20,
+      movementTreshold = 1L<<20,
       
       // unit-height / ms
       // kuinka paljon dmx-arvo-korkeus (16bit) muuttuu millisekunnissa * 2^16
-      // (ylädmx-aladmx) * [koko matka sekunteina] * 1000 * 2^8 * 2^16
-      speedUp = 4697,
-      speedDown = 4697,
+      // (ylädmx-aladmx) / ([koko matka sekunteina] * 1000) * 2^8 * 2^16
+      speedUp = 4698,
+      speedDown = 4800,
       
       // ms
       stateChangeThrottle = 1000,
       killSwitchReceiveInterval = 200;
-    
+
+    unsigned long oldTargetHeight;
     unsigned long targetHeight;
     
     int hChan, hChanFine;
@@ -143,6 +144,7 @@ class Truss {
       if (forceStop) {
         if (targetState != state) _setState(targetState, true);
         else _setState(State::notMoving, true);
+        if(!allowDown) { _setState(State::notMoving, true); }
       } else {
         if (allowUp && targetState == State::movingUp) _setState(targetState);
         else if (allowDown && targetState == State::movingDown) _setState(targetState);
@@ -159,12 +161,15 @@ class Truss {
     
     void setTarget(unsigned int pos) {
       if (operatingMode == Mode::goToTarget) {
+        oldTargetHeight = targetHeight;
         targetHeight = (unsigned long)pos << 16;
+        if(targetHeight < minHeight) {
+          targetHeight = minHeight;
+        }
       }
     }
     
     void setKillSwitch(bool status) {
-      digitalWrite(13, status);
       killSwitchEngaged = status;
       if (status) {
         currentHeight = maxHeight;
@@ -177,8 +182,8 @@ class Truss {
     }
 } trusses[N] = {
   // [alkukorkeus], [ylös rele pin], [alas rele pin], [korkeuskanava], [fine]
-  Truss(Truss::minHeight, 22, 23, 452, 453), // 462
-  Truss(Truss::minHeight, 24, 25, 482, 483)  // 492
+  Truss(Truss::minHeight, 23, 22, 452, 453), // 462
+  Truss(Truss::minHeight, 25, 24, 482, 483)  // 492
 };
 
 #include <DMXSerial.h>
@@ -190,7 +195,6 @@ void setup() {
   }
   Serial3.begin(9600);
   pinMode(13, OUTPUT);
-  digitalWrite(13, 0);
   DMXSerial.init(DMXReceiver);
 }
 
@@ -200,31 +204,27 @@ unsigned long ksTime;
 void loop() {
   if (ksRequestSent) {
     if (Serial3.available()) {
-      digitalWrite(13, 0);
       int in = (int)Serial3.read();
       if ((in & 0x0E) == 0 && (in & 0xE0) == 0) {
         trusses[in >> 4].setKillSwitch(in & 0x01);
       }
       while (Serial3.available()) Serial3.read();
       ksRequestSent = false;
-      //ksRequestStatus = (ksRequestStatus + 1) % N;
     }
-    if (millis() - ksTime > 200) {
-      digitalWrite(13, 0);
-      delay(5);
+    if (millis() - ksTime > 150) {
       ksRequestSent = 0; 
     }
   }
   if (!ksRequestSent) {
-    digitalWrite(13, 1);
     ksTime = millis();
     Serial3.write(ksRequestStatus << 4 | 0x02);
+    if(ksRequestStatus == 0) { ksRequestStatus = 1; }
+    else { ksRequestStatus = 0; }
     ksRequestSent = 1;
   }
   
   unsigned long lastDMX = DMXSerial.noDataSince();
-  if (lastDMX < 2000) {
-    // analogWrite(13, DMXSerial.read(482));
+  if (lastDMX < 1500) {
     for (int i = 0; i < N; ++i) {
       trusses[i].setAllowMovement(true);
       unsigned int h = DMXSerial.read(trusses[i].hChan);
